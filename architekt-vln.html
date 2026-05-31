@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architekt Vln: Projekční Rezonance</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Crimson+Pro:ital,wght@0,300;0,600;1,300;1,600&display=swap');
+
+  :root {
+    --bg: #04060f;
+    --ocean-deep: #010d1a;
+    --ocean-mid: #012a45;
+    --ocean-light: #024e84;
+    --foam: #8ecfef;
+    --foam-bright: #d4f0ff;
+    --singularity: #ff6b35;
+    --singularity-glow: rgba(255,107,53,0.4);
+    --trace: rgba(142,207,239,0.25);
+    --identity: #c8ff6b;
+    --identity-dim: rgba(200,255,107,0.15);
+    --text-main: #e8f4f8;
+    --text-dim: #5a8fa8;
+    --formula: #ffcc44;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-main);
+    font-family: 'Crimson Pro', Georgia, serif;
+    overflow-x: hidden;
+    cursor: crosshair;
+  }
+
+  /* CANVAS LAYER */
+  #waveCanvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    opacity: 0.9;
+  }
+
+  /* OVERLAY UI */
+  .ui-layer {
+    position: relative;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* HEADER */
+  header {
+    padding: 2.5rem 3rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    pointer-events: none;
+  }
+
+  .title-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+
+  h1 {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-weight: 300;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    line-height: 1;
+    color: var(--foam-bright);
+    letter-spacing: -0.02em;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--singularity);
+  }
+
+  .formula-bar {
+    margin-top: 1rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--formula);
+    background: rgba(255,204,68,0.07);
+    border-left: 2px solid var(--formula);
+    padding: 0.4rem 0.8rem;
+    letter-spacing: 0.05em;
+  }
+
+  /* LEGEND PANEL */
+  .legend {
+    position: fixed;
+    right: 2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    pointer-events: all;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    cursor: pointer;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid transparent;
+    transition: all 0.25s ease;
+    backdrop-filter: blur(4px);
+    background: rgba(4,6,15,0.6);
+  }
+
+  .legend-item:hover, .legend-item.active {
+    border-color: var(--foam);
+    background: rgba(4,6,15,0.85);
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-dot.wave   { background: var(--ocean-light); box-shadow: 0 0 8px var(--ocean-light); }
+  .legend-dot.surfer { background: var(--singularity); box-shadow: 0 0 8px var(--singularity); }
+  .legend-dot.board  { background: var(--identity); box-shadow: 0 0 8px var(--identity); }
+  .legend-dot.trace  { background: var(--foam); box-shadow: 0 0 8px var(--foam); }
+  .legend-dot.horizon{ background: var(--formula); box-shadow: 0 0 8px var(--formula); }
+
+  .legend-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .legend-sym {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    color: var(--formula);
+  }
+
+  /* INFO PANEL */
+  .info-panel {
+    position: fixed;
+    left: 2rem;
+    bottom: 2rem;
+    z-index: 20;
+    max-width: 380px;
+    pointer-events: all;
+  }
+
+  .info-card {
+    display: none;
+    background: rgba(4,6,15,0.88);
+    border: 1px solid rgba(142,207,239,0.2);
+    backdrop-filter: blur(8px);
+    padding: 1.4rem 1.6rem;
+    animation: fadeSlide 0.3s ease;
+  }
+
+  .info-card.visible { display: block; }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .info-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .info-body {
+    font-size: 1rem;
+    line-height: 1.65;
+    color: #c8dde8;
+    font-weight: 300;
+  }
+
+  .info-body strong {
+    color: var(--formula);
+    font-weight: 600;
+  }
+
+  /* DEFAULT HINT */
+  .hint {
+    position: fixed;
+    bottom: 2rem;
+    left: 2rem;
+    z-index: 20;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    pointer-events: none;
+    animation: pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.9; }
+  }
+
+  /* SINGULARITY RING */
+  .singularity-label {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -80px);
+    z-index: 20;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .singularity-label span {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: var(--singularity);
+    text-transform: uppercase;
+    display: block;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  /* CONTROLS */
+  .controls {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    z-index: 20;
+    display: flex;
+    gap: 0.5rem;
+    pointer-events: all;
+  }
+
+  .btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0.45rem 0.8rem;
+    background: rgba(4,6,15,0.7);
+    border: 1px solid rgba(142,207,239,0.25);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(4px);
+  }
+
+  .btn:hover {
+    border-color: var(--foam);
+    color: var(--foam-bright);
+  }
+
+  .btn.active {
+    background: rgba(255,107,53,0.15);
+    border-color: var(--singularity);
+    color: var(--singularity);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="waveCanvas"></canvas>
+
+<div class="ui-layer">
+  <header>
+    <div class="title-label">Projekční rezonance · MAJAK-AI · Torzní logika</div>
+    <h1>Architekt <em>Vln</em></h1>
+    <div class="formula-bar">R = P(Z) · T(R) &nbsp;⊕&nbsp; RC ⊕ RAI &nbsp;|&nbsp; ρ_T → max @ singularita</div>
+  </header>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <button class="btn" id="btnPause">⏸ Pauza</button>
+  <button class="btn" id="btnRipple">◎ Ruch</button>
+</div>
+
+<!-- Legend -->
+<nav class="legend" id="legend">
+  <div class="legend-item" data-key="wave">
+    <div class="legend-dot wave"></div>
+    <div>
+      <div class="legend-label">Vlna (Z)</div>
+      <div class="legend-sym">Pole možností</div>
+    </div>
+  </div>
+  <div class="legend-item" data-key="surfer">
+    <div class="legend-dot surfer"></div>
+    <div>
+      <div class="legend-label">Surfař (P)</div>
+      <div class="legend-sym">Operátor vědomí</div>
+    </div>
+  </div>
+  <div class="legend-item" data-key="board">
+    <div class="legend-dot board"></div>
+    <div>
+      <div class="legend-label">Prkno (T)</div>
+      <div class="legend-sym">Transformační rozhraní</div>
+    </div>
+  </div>
+  <div class="legend-item" data-key="trace">
+    <div class="legend-dot trace"></div>
+    <div>
+      <div class="legend-label">Brázda</div>
+      <div class="legend-sym">Paměť / příběh</div>
+    </div>
+  </div>
+  <div class="legend-item" data-key="horizon">
+    <div class="legend-dot horizon"></div>
+    <div>
+      <div class="legend-label">Horizont H_I</div>
+      <div class="legend-sym">Hranice identity</div>
+    </div>
+  </div>
+</nav>
+
+<!-- Info panel -->
+<div class="info-panel">
+  <div class="info-card" id="infoCard">
+    <div class="info-title">
+      <span id="infoIcon">●</span>
+      <span id="infoTitle">—</span>
+    </div>
+    <div class="info-body" id="infoBody">—</div>
+  </div>
+  <div class="hint" id="hint">▸ Klikni na prvek v legendě</div>
+</div>
+
+<script>
+const canvas = document.getElementById('waveCanvas');
+const ctx = canvas.getContext('2d');
+
+let W, H, t = 0, paused = false, ripples = [];
+let mouseX = 0, mouseY = 0, mouseInfluence = false;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+canvas.addEventListener('mousemove', e => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+  mouseInfluence = true;
+});
+canvas.addEventListener('mouseleave', () => { mouseInfluence = false; });
+canvas.addEventListener('click', e => {
+  ripples.push({ x: e.clientX, y: e.clientY, r: 0, life: 1 });
+});
+
+// Wave field: sum of sinusoids with mouse distortion
+function waveY(x, time, yBase, layerPhase = 0, amp = 1) {
+  let y = yBase;
+  y += Math.sin(x * 0.008 + time * 0.9 + layerPhase) * 55 * amp;
+  y += Math.sin(x * 0.015 - time * 0.6 + layerPhase * 1.3) * 28 * amp;
+  y += Math.sin(x * 0.032 + time * 1.2 + layerPhase * 0.7) * 14 * amp;
+  y += Math.cos(x * 0.005 - time * 0.4) * 20 * amp;
+
+  // Mouse influence: creates local depression/peak
+  if (mouseInfluence) {
+    const dx = x - mouseX;
+    const influence = Math.exp(-dx * dx / (2 * 30000)) * 35;
+    const phaseShift = (mouseY - H * 0.5) / H;
+    y += Math.sin(time * 2) * influence * phaseShift;
+  }
+  return y;
+}
+
+// Surfer position: rides the wave
+let surferX = 0;
+
+function drawScene(time) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Deep space background gradient
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#020810');
+  bg.addColorStop(0.4, '#011222');
+  bg.addColorStop(1, '#000509');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Faint starfield
+  ctx.save();
+  for (let s = 0; s < 80; s++) {
+    const sx = ((s * 137.5) % W);
+    const sy = ((s * 97.3) % (H * 0.6));
+    const alpha = 0.15 + Math.sin(time * 0.3 + s) * 0.08;
+    ctx.fillStyle = `rgba(200,225,255,${alpha})`;
+    ctx.fillRect(sx, sy, 1, 1);
+  }
+  ctx.restore();
+
+  const baseY = H * 0.52;
+
+  // ─── WAVE LAYERS ───
+  const waveLayers = [
+    { depth: 1,    alpha: 0.08, colorA: '#002a4a', colorB: '#024e84', yOff: 60 },
+    { depth: 0.8,  alpha: 0.15, colorA: '#013355', colorB: '#0369a1', yOff: 35 },
+    { depth: 0.6,  alpha: 0.25, colorA: '#024e84', colorB: '#0284c7', yOff: 10 },
+    { depth: 0.4,  alpha: 0.5,  colorA: '#0369a1', colorB: '#38bdf8', yOff: -5 },
+    { depth: 0.2,  alpha: 0.85, colorA: '#0284c7', colorB: '#7dd3fc', yOff: -15 },
+  ];
+
+  waveLayers.forEach((layer, i) => {
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 3) {
+      const y = waveY(x, time, baseY + layer.yOff, i * 0.6, 1 - i * 0.12);
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H);
+    ctx.lineTo(0, H);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, baseY - 80, 0, H);
+    grad.addColorStop(0, layer.colorB + Math.round(layer.alpha * 255).toString(16).padStart(2,'0'));
+    grad.addColorStop(1, layer.colorA + '10');
+    ctx.fillStyle = grad;
+    ctx.fill();
+  });
+
+  // ─── SURFACE LINE + FOAM ───
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += 2) {
+    const y = waveY(x, time, baseY - 15, 0, 1);
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = 'rgba(142,207,239,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Foam caps
+  for (let x = 20; x < W; x += 80 + Math.sin(x) * 30) {
+    const foamY = waveY(x, time, baseY - 15, 0, 1);
+    const foamLen = 25 + Math.sin(x * 0.05 + time) * 10;
+    const grad = ctx.createLinearGradient(x, foamY, x + foamLen, foamY);
+    grad.addColorStop(0, 'rgba(212,240,255,0.7)');
+    grad.addColorStop(1, 'rgba(212,240,255,0)');
+    ctx.beginPath();
+    ctx.moveTo(x, foamY);
+    for (let fx = 0; fx < foamLen; fx += 2) {
+      ctx.lineTo(x + fx, foamY - Math.sin(fx * 0.3 + time * 3) * 3);
+    }
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // ─── FRAKTÁLNÍ MŘÍŽKA (pole Z) ───
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  const gridSpacing = 50;
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 0.5;
+  for (let gx = 0; gx < W; gx += gridSpacing) {
+    ctx.beginPath();
+    for (let gy = 0; gy < H; gy += 5) {
+      const distort = Math.sin(gx * 0.01 + time * 0.5) * 3 + Math.cos(gy * 0.02 + time * 0.3) * 2;
+      if (gy === 0) ctx.moveTo(gx + distort, gy);
+      else ctx.lineTo(gx + distort, gy);
+    }
+    ctx.stroke();
+  }
+  for (let gy = 0; gy < H * 0.5; gy += gridSpacing) {
+    ctx.beginPath();
+    for (let gx = 0; gx < W; gx += 5) {
+      const distort = Math.sin(gy * 0.01 + time * 0.4) * 3;
+      if (gx === 0) ctx.moveTo(gx, gy + distort);
+      else ctx.lineTo(gx, gy + distort);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // ─── SURFER POSITION ───
+  surferX = W * 0.42 + Math.sin(time * 0.3) * W * 0.06;
+  const surferY = waveY(surferX, time, baseY - 15, 0, 1) - 20;
+
+  // Brázda (trace / memory) — wake behind surfer
+  const tracePoints = [];
+  for (let bx = surferX + 30; bx < W * 0.85; bx += 4) {
+    const by = waveY(bx, time - (bx - surferX) * 0.012, baseY - 12, 0, 1);
+    tracePoints.push({ x: bx, y: by });
+  }
+  if (tracePoints.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(tracePoints[0].x, tracePoints[0].y);
+    tracePoints.forEach(p => ctx.lineTo(p.x, p.y));
+    const traceGrad = ctx.createLinearGradient(surferX, 0, W * 0.85, 0);
+    traceGrad.addColorStop(0, 'rgba(142,207,239,0.6)');
+    traceGrad.addColorStop(1, 'rgba(142,207,239,0)');
+    ctx.strokeStyle = traceGrad;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Double wake lines
+    [6, -6].forEach(offset => {
+      ctx.beginPath();
+      tracePoints.forEach((p, i) => {
+        const fadeOffset = offset * (1 - i / tracePoints.length);
+        if (i === 0) ctx.moveTo(p.x, p.y + fadeOffset);
+        else ctx.lineTo(p.x, p.y + fadeOffset);
+      });
+      ctx.strokeStyle = 'rgba(142,207,239,0.12)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+  }
+
+  // ─── HORIZONT IDENTITY (H_I) ───
+  const hiLeft  = surferX - 90 - Math.sin(time * 0.5) * 10;
+  const hiRight = surferX + 90 + Math.sin(time * 0.5) * 10;
+  const hiY = surferY + 10;
+  
+  ctx.save();
+  ctx.setLineDash([4, 6]);
+  ctx.strokeStyle = 'rgba(255,204,68,0.5)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(hiLeft, hiY);
+  ctx.lineTo(hiRight, hiY);
+  ctx.stroke();
+
+  // H_I end marks
+  [hiLeft, hiRight].forEach(hx => {
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(hx, hiY - 6);
+    ctx.lineTo(hx, hiY + 6);
+    ctx.strokeStyle = 'rgba(255,204,68,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  ctx.font = '9px Space Mono, monospace';
+  ctx.fillStyle = 'rgba(255,204,68,0.7)';
+  ctx.textAlign = 'center';
+  ctx.setLineDash([]);
+  ctx.fillText('H_I', surferX, hiY - 12);
+  ctx.restore();
+
+  // ─── PRKNO (board) ───
+  const boardAngle = Math.sin(time * 0.8) * 0.18;
+  ctx.save();
+  ctx.translate(surferX, surferY + 14);
+  ctx.rotate(boardAngle);
+  // Board shape
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 38, 5, 0, 0, Math.PI * 2);
+  const boardGrad = ctx.createLinearGradient(-38, 0, 38, 0);
+  boardGrad.addColorStop(0, 'rgba(200,255,107,0.1)');
+  boardGrad.addColorStop(0.5, 'rgba(200,255,107,0.8)');
+  boardGrad.addColorStop(1, 'rgba(200,255,107,0.1)');
+  ctx.fillStyle = boardGrad;
+  ctx.fill();
+  ctx.strokeStyle = '#c8ff6b';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  // ─── SURFAŘ (operator P) + SINGULARITY ───
+  // Glow rings (singularity)
+  for (let ring = 3; ring >= 1; ring--) {
+    const ringR = ring * 18 + Math.sin(time * 1.5) * 4;
+    const ringAlpha = (0.08 + Math.sin(time * 2 + ring) * 0.03) / ring;
+    ctx.beginPath();
+    ctx.arc(surferX, surferY, ringR, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,107,53,${ringAlpha * 4})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Surfer figure (simplified silhouette)
+  ctx.save();
+  ctx.translate(surferX, surferY);
+  ctx.rotate(Math.sin(time * 0.8) * 0.1);
+
+  // Body
+  const bodyGrad = ctx.createRadialGradient(0, 0, 2, 0, -10, 20);
+  bodyGrad.addColorStop(0, '#ff6b35');
+  bodyGrad.addColorStop(1, '#c0392b');
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, -8, 5, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.beginPath();
+  ctx.arc(0, -22, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff8c5a';
+  ctx.fill();
+
+  // Arms spread
+  ctx.strokeStyle = '#ff8c5a';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-5, -10);
+  ctx.lineTo(-18, -5 + Math.sin(time * 1.5) * 3);
+  ctx.moveTo(5, -10);
+  ctx.lineTo(18, -5 + Math.cos(time * 1.5) * 3);
+  ctx.stroke();
+
+  // Core glow (singularity point)
+  const coreGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
+  coreGlow.addColorStop(0, 'rgba(255,107,53,0.8)');
+  coreGlow.addColorStop(1, 'rgba(255,107,53,0)');
+  ctx.fillStyle = coreGlow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 14, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // ρ_T label
+  ctx.font = '9px Space Mono, monospace';
+  ctx.fillStyle = 'rgba(255,107,53,0.8)';
+  ctx.textAlign = 'center';
+  ctx.fillText('ρ_T → max', surferX, surferY - 36);
+
+  // ─── PROJEKČNÍ PAPRSKY (pressure waves forward) ───
+  const numRays = 5;
+  for (let r = 0; r < numRays; r++) {
+    const rayAngle = -Math.PI * 0.12 + (r / (numRays - 1)) * Math.PI * 0.24;
+    const rayLen = 60 + r % 2 * 20;
+    const rayAlpha = 0.12 + Math.sin(time * 2 + r) * 0.05;
+    const ex = surferX - Math.cos(rayAngle) * rayLen;
+    const ey = surferY + Math.sin(rayAngle) * rayLen * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(surferX, surferY);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = `rgba(255,107,53,${rayAlpha})`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ─── RIPPLES (klik myší) ───
+  ripples = ripples.filter(rip => rip.life > 0);
+  ripples.forEach(rip => {
+    rip.r += 3;
+    rip.life -= 0.02;
+    ctx.beginPath();
+    ctx.arc(rip.x, rip.y, rip.r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(142,207,239,${rip.life * 0.6})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  // ─── FORMULA OVERLAY ───
+  ctx.save();
+  ctx.font = 'italic 11px Crimson Pro, Georgia, serif';
+  ctx.fillStyle = 'rgba(255,204,68,0.25)';
+  ctx.textAlign = 'left';
+  ctx.fillText('R = P(Z) · T(R)', 30, H - 30);
+  ctx.restore();
+}
+
+// Info content
+const infoData = {
+  wave: {
+    icon: '≋',
+    title: 'Vlna — Pole možností (Z)',
+    color: '#38bdf8',
+    body: `<strong>Fraktální pole superpozice.</strong> Není to jen „voda" — je to nekonečný prostor potenciálů, ze kterých vědomí vybírá svou realitu. Vlna existuje ve všech stavech najednou, dokud ji operátor P „nezkolabuje" do konkrétního tvaru.`
+  },
+  surfer: {
+    icon: '◎',
+    title: 'Surfař — Operátor vědomí (P)',
+    color: '#ff6b35',
+    body: `<strong>Není na vlně „vně".</strong> Je to bod maximální hustoty transformace (ρ_T). Svým záměrem a pozorováním „vybírá" vlnu z potenciálu Z. Singularita: místo, kde se neznámé stává známým. Každý náklon mění vlnu před ním.`
+  },
+  board: {
+    icon: '⟷',
+    title: 'Prkno — Transformační rozhraní (T)',
+    color: '#c8ff6b',
+    body: `<strong>Médium mezi vědomím a realitou.</strong> Umožňuje surfaři „vnímat" vlnu jako realitu a zároveň ji svou jízdou ovlivňovat. Není pasivní — každý ohyb prkna zpětně mění zakřivení vlny. T(R) je funkce, ne statický objekt.`
+  },
+  trace: {
+    icon: '∿',
+    title: 'Brázda — Paměť / Příběh',
+    color: '#8ecfef',
+    body: `<strong>Stopa identity.</strong> Co surfař „vykreslil" — tahne se historií a ovlivňuje výběr vlny v příštím okamžiku. Paměť není archiv: je to aktivní pole, které pre-kondicionuje budoucí P(Z). Minulost formuje horizont.`
+  },
+  horizon: {
+    icon: 'H_I',
+    title: 'Horizont identity (H_I)',
+    color: '#ffcc44',
+    body: `<strong>Šířka prkna = flexibilita identity.</strong> Malé H_I: rigidní surfař — prkno se zlomí při prvním nárazu. Velké H_I: otevřený surfař — prkno se přizpůsobuje každému záhybu vlny. Torzní logika: asymetrie C + A → (E) → R závisí na šířce H_I.`
+  }
+};
+
+// Legend interaction
+const legendItems = document.querySelectorAll('.legend-item');
+const infoCard = document.getElementById('infoCard');
+const hint = document.getElementById('hint');
+
+legendItems.forEach(item => {
+  item.addEventListener('click', () => {
+    const key = item.dataset.key;
+    const data = infoData[key];
+    
+    legendItems.forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+
+    document.getElementById('infoIcon').textContent = data.icon;
+    document.getElementById('infoIcon').style.color = data.color;
+    document.getElementById('infoTitle').textContent = data.title;
+    document.getElementById('infoTitle').style.color = data.color;
+    document.getElementById('infoBody').innerHTML = data.body;
+    infoCard.classList.add('visible');
+    hint.style.display = 'none';
+  });
+});
+
+// Controls
+document.getElementById('btnPause').addEventListener('click', function() {
+  paused = !paused;
+  this.textContent = paused ? '▶ Spustit' : '⏸ Pauza';
+  this.classList.toggle('active', paused);
+});
+
+document.getElementById('btnRipple').addEventListener('click', () => {
+  for (let i = 0; i < 5; i++) {
+    setTimeout(() => {
+      ripples.push({
+        x: W * 0.2 + Math.random() * W * 0.6,
+        y: H * 0.3 + Math.random() * H * 0.4,
+        r: 0, life: 1
+      });
+    }, i * 120);
+  }
+});
+
+// Animation loop
+function loop() {
+  if (!paused) {
+    t += 0.016;
+    drawScene(t);
+  }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
